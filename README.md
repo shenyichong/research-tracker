@@ -16,6 +16,13 @@
   - 按照 stars 数量降序排序
   - 每次返回最受欢迎的 10 个项目
 
+- **Google Scholar**
+  - 使用 scholarly 库搜索学术论文
+  - 按引用次数排序
+  - 支持时间筛选
+  - 每次返回最相关的 10 篇论文
+  - 显示引用次数和作者信息
+
 ### 2. 时间筛选
 支持多个时间范围的筛选：
 - 一周内
@@ -52,6 +59,7 @@
 - requests: HTTP 请求
 - python-dateutil: 日期处理
 - pytz: 时区处理
+- scholarly: Google Scholar 搜索
 
 ### 前端
 - 原生 JavaScript
@@ -62,7 +70,7 @@
 
 1. 安装依赖： 
 bash
-pip install flask feedparser requests python-dateutil pytz
+pip install flask feedparser requests python-dateutil pytz scholarly
 
 2. 运行项目：
 bash
@@ -99,7 +107,8 @@ http://localhost:5001
 1. GitHub API 可能有访问限制
 2. 建议合理使用关键词以获得更精确的搜索结果
 3. 时间筛选对不同来源的处理方式略有不同
+4. Google Scholar 搜索可能受到访问频率限制，建议合理使用
 
 ## 未来改进方向
 
-1. 添加更多数据源
+1. 添加更多数据源: google 学术搜索

@@ -168,6 +168,27 @@
             flex-direction: column;
             gap: 20px;
         }
+        .google-scholar {
+            background-color: #4285f4;
+        }
+        
+        .paper-meta {
+            margin-top: 10px;
+            color: #666;
+        }
+        .paper-meta small {
+            margin-right: 15px;
+        }
+        
+        .citations {
+            display: none;
+        }
+        .semantic-scholar {
+            background-color: #1857B6;
+        }
+        .github {
+            background-color: #24292e;
+        }
     </style>
 </head>
 <body>
@@ -205,6 +226,9 @@
                             <div id="checkboxes">
                                 <label>
                                     <input type="checkbox" name="source" value="arxiv" checked> arXiv
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="source" value="semantic_scholar" checked> Semantic Scholar
                                 </label>
                                 <label>
                                     <input type="checkbox" name="source" value="github" checked> GitHub
@@ -285,38 +309,112 @@
             fetch(`/update/${encodeURIComponent(keyword)}/${timeFilter}/${selectedSources.join(',')}`)
                 .then(response => response.json())
                 .then(data => {
-                    // 显示论文
-                    document.getElementById('papersSection').style.display = 
-                        selectedSources.some(s => ['arxiv', 'biorxiv', 'medrxiv'].includes(s)) ? 'block' : 'none';
+                    // 显示论文部分
+                    const papersSection = document.getElementById('papersSection');
+                    const papersContainer = document.getElementById('papers');
                     
-                    const papersHtml = data.papers.map(paper => `
-                        <div class="paper">
-                            <h3>
-                                <a href="${paper.link}" target="_blank">${paper.title}</a>
-                                <span class="source-tag ${paper.source.toLowerCase()}">${paper.source}</span>
-                            </h3>
-                            <p>${paper.summary}</p>
-                            <small>发布时间: ${paper.published}</small>
-                        </div>
-                    `).join('');
-                    document.getElementById('papers').innerHTML = papersHtml || '<p>没有找到符合条件的论文</p>';
-
-                    // 显示GitHub项目
-                    document.getElementById('reposSection').style.display = 
-                        selectedSources.includes('github') ? 'block' : 'none';
+                    if (selectedSources.includes('semantic_scholar') || selectedSources.includes('arxiv')) {
+                        papersSection.style.display = 'block';
+                        
+                        // 确保 data.papers 存在且是数组
+                        const papers = Array.isArray(data.papers) ? data.papers : [];
+                        
+                        if (papers.length > 0) {
+                            try {
+                                const papersHtml = papers.map(paper => {
+                                    // 添加空值检查
+                                    const title = paper.title || 'Untitled';
+                                    const link = paper.link || '#';
+                                    const source = paper.source || 'Unknown';
+                                    const summary = paper.summary || paper.abstract || '无摘要';
+                                    
+                                    // 处理作者显示，只显示前三个
+                                    let authorDisplay = '';
+                                    if (paper.authors) {
+                                        const authorList = Array.isArray(paper.authors) ? paper.authors : paper.authors.split(',');
+                                        const displayAuthors = authorList.slice(0, 3);
+                                        authorDisplay = displayAuthors.join(', ');
+                                        if (authorList.length > 3) {
+                                            authorDisplay += ' 等';
+                                        }
+                                    }
+                                    
+                                    // 格式化日期为年月日
+                                    let publishedDate = '未知';
+                                    if (paper.published) {
+                                        try {
+                                            const date = new Date(paper.published);
+                                            if (isNaN(date.getTime())) {
+                                                // 如果是无效日期，可能只有年份
+                                                publishedDate = paper.published;
+                                            } else {
+                                                // 检查月份和日期是否为1月1日（这通常表示只有年份信息）
+                                                if (date.getMonth() === 0 && date.getDate() === 1) {
+                                                    publishedDate = date.getFullYear().toString();
+                                                } else {
+                                                    publishedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                                                }
+                                            }
+                                        } catch (e) {
+                                            publishedDate = paper.published;
+                                        }
+                                    }
+                                    
+                                    const citations = paper.citations;
+                                    
+                                    return `
+                                        <div class="paper">
+                                            <h3>
+                                                <a href="${link}" target="_blank">${title}</a>
+                                                <span class="source-tag ${source.toLowerCase().replace(' ', '-')}">${source}</span>
+                                            </h3>
+                                            <p>${summary}</p>
+                                            <div class="paper-meta">
+                                                ${authorDisplay ? `<small>作者: ${authorDisplay}</small>` : ''}
+                                                <small>发布时间: ${publishedDate}</small>
+                                                ${citations !== undefined ? `<small>引用数: ${citations}</small>` : ''}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('');
+                                papersContainer.innerHTML = papersHtml;
+                            } catch (error) {
+                                papersContainer.innerHTML = '<p>显示论文时发生错误</p>';
+                            }
+                        } else {
+                            papersContainer.innerHTML = '<p>没有找到符合条件的论文</p>';
+                        }
+                    } else {
+                        papersSection.style.display = 'none';
+                    }
                     
-                    const reposHtml = data.github.map(repo => `
-                        <div class="repo">
-                            <h3><a href="${repo.url}" target="_blank">${repo.name}</a></h3>
-                            <p>${repo.description || '暂无描述'}</p>
-                            <div class="repo-meta">
-                                <small>⭐ ${repo.stars}</small>
-                                <small>创建时间: ${repo.created_at}</small>
-                                <small>最后更新: ${repo.updated_at}</small>
-                            </div>
-                        </div>
-                    `).join('');
-                    document.getElementById('repos').innerHTML = reposHtml || '<p>没有找到相关项目</p>';
+                    // GitHub 部分
+                    const reposSection = document.getElementById('reposSection');
+                    if (selectedSources.includes('github')) {
+                        reposSection.style.display = 'block';
+                        const repos = Array.isArray(data.github) ? data.github : [];
+                        if (repos.length > 0) {
+                            const reposHtml = repos.map(repo => `
+                                <div class="repo">
+                                    <h3><a href="${repo.url || '#'}" target="_blank">${repo.name || 'Unnamed'}</a></h3>
+                                    <p>${repo.description || '暂无描述'}</p>
+                                    <div class="repo-meta">
+                                        <small>⭐ ${repo.stars || 0}</small>
+                                        <small>创建时间: ${repo.created_at || '未知'}</small>
+                                        <small>最后更新: ${repo.updated_at || '未知'}</small>
+                                    </div>
+                                </div>
+                            `).join('');
+                            document.getElementById('repos').innerHTML = reposHtml;
+                        } else {
+                            document.getElementById('repos').innerHTML = '<p>没有找到相关项目</p>';
+                        }
+                    } else {
+                        reposSection.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('papers').innerHTML = '<p>获取数据时发生错误</p>';
                 })
                 .finally(() => {
                     loading.style.display = 'none';

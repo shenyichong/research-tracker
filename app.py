@@ -7,8 +7,11 @@ import urllib.parse
 import re
 from dateutil import parser as date_parser
 import pytz
+import logging
+import time
 
 app = Flask(__name__)
+app.logger.setLevel(logging.CRITICAL)  # 只显示严重错误
 
 class DataFetcher:
     def _get_published_date(self, entry):
@@ -65,8 +68,6 @@ class DataFetcher:
             f'&sortOrder=descending'
         )
         
-        app.logger.info(f"arXiv search URL: {base_url}")  # 用于调试
-        
         response = feedparser.parse(base_url)
         return [{
             'title': entry.title,
@@ -113,6 +114,61 @@ class DataFetcher:
             app.logger.error(f"Error fetching GitHub data: {str(e)}")
         return []
 
+def fetch_from_semantic_scholar(query):
+    try:
+        base_url = "http://api.semanticscholar.org/graph/v1/paper/search"
+        params = {
+            "query": query,
+            "limit": 10,
+            "fields": "title,authors,year,abstract,url,venue,citationCount",
+            "sort": "citationCount:desc"
+        }
+        
+        headers = {
+            'Accept': 'application/json'
+        }
+        
+        response = requests.get(base_url, params=params, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            app.logger.error(f"Semantic Scholar API error: {response.status_code}")
+            app.logger.error(f"Response content: {response.text}")
+            return []
+            
+        data = response.json()
+        papers = []
+        
+        if 'data' not in data:
+            app.logger.error(f"Unexpected API response: {data}")
+            return []
+            
+        for paper in data['data']:
+            try:
+                # 确保所有必需的字段都存在
+                paper_data = {
+                    'title': paper.get('title', 'Untitled'),
+                    'link': paper.get('url', ''),  # 使用 url 作为 link
+                    'published': str(paper.get('year', '')),  # 年份作为发布时间
+                    'summary': paper.get('abstract', 'No abstract available'),  # 使用 abstract 作为 summary
+                    'source': 'Semantic Scholar',
+                    'citations': paper.get('citationCount', 0),
+                    'authors': ', '.join([author.get('name', '') for author in paper.get('authors', [])])
+                }
+                
+                papers.append(paper_data)
+            except Exception as e:
+                app.logger.error(f"Error processing paper: {e}")
+                continue
+                
+        return papers
+        
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Request failed: {e}")
+        return []
+    except Exception as e:
+        app.logger.error(f"Unexpected error: {e}")
+        return []
+
 @app.route('/')
 def index():
     try:
@@ -128,28 +184,29 @@ def update(keyword, time_filter, sources):
         fetcher = DataFetcher()
         selected_sources = sources.split(',')
         
-        # 获取所有来源的论文
         all_papers = []
+        github_results = []
         
+        if 'semantic_scholar' in selected_sources:
+            scholar_papers = fetch_from_semantic_scholar(decoded_keyword)
+            all_papers.extend(scholar_papers)
+            
         if 'arxiv' in selected_sources:
-            try:
-                all_papers.extend(fetcher.fetch_arxiv(decoded_keyword))
-            except Exception as e:
-                app.logger.error(f"Error fetching arXiv: {str(e)}")
+            arxiv_papers = fetcher.fetch_arxiv(decoded_keyword)
+            all_papers.extend(arxiv_papers)
+            
+        if 'github' in selected_sources:
+            github_results = fetcher.fetch_github(decoded_keyword, time_filter)
         
         # 按时间筛选
         filtered_papers = fetcher._filter_by_date(all_papers, time_filter)
-        filtered_papers.sort(key=lambda x: x['published'], reverse=True)
-        
-        # GitHub 结果
-        github_results = []
-        if 'github' in selected_sources:
-            github_results = fetcher.fetch_github(decoded_keyword, time_filter)
+        filtered_papers.sort(key=lambda x: x.get('citations', 0), reverse=True)
         
         results = {
             'papers': filtered_papers,
             'github': github_results
         }
+        
         return jsonify(results)
     except Exception as e:
         app.logger.error(f"Error in update: {str(e)}")
